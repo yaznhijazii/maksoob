@@ -335,7 +335,13 @@
                         <span class="file-status" id="coursesStatus"></span>
                         <input type="file" id="coursesFile" accept=".csv,.xlsx,.xls">
                     </div>
-                </div>
+
+                    <div class="file-input-wrapper" id="progressThresholdsWrapper">
+                        <label for="progressThresholdsFile">🎯 Course Progress Thresholds (Optional)</label>
+                        <span class="file-status" id="progressThresholdsStatus"></span>
+                        <input type="file" id="progressThresholdsFile" accept=".csv,.xlsx,.xls">
+                    </div>
+                    </div>
             </div>
             
             <div class="step">
@@ -357,8 +363,8 @@
                     </div>
                     
                     <div class="form-group">
-                        <label>Min Progress %</label>
-                        <input type="number" id="minProgress" value="10" min="0" max="100" step="0.1">
+                        <label>Min Progress % (Default)</label>
+                        <input type="number" id="minProgress" value="10" min="0" max="100" step="0.1" title="Used if no specific threshold is provided in the uploaded file.">
                     </div>
                     
                     <div class="form-group">
@@ -431,6 +437,7 @@
             salesData: null,
             enrollmentsData: null,
             coursesData: null,
+            progressThresholdsData: null, // NEW DATA FIELD
             results: null
         };
 
@@ -445,6 +452,12 @@
         document.getElementById('coursesFile').addEventListener('change', function(e) {
             loadFile(e, 'courses');
         });
+
+        // NEW EVENT LISTENER
+        document.getElementById('progressThresholdsFile').addEventListener('change', function(e) {
+            loadFile(e, 'progressThresholds');
+        });
+        // END NEW EVENT LISTENER
         
         document.getElementById('calculateBtn').addEventListener('click', calculatePayouts);
         document.getElementById('exportTeacherCSV').addEventListener('click', function() { exportCSV('teacher'); });
@@ -522,7 +535,7 @@
                     const settings = {
                         quarter: parseInt(document.getElementById('quarter').value),
                         year: parseInt(document.getElementById('year').value),
-                        minProgress: parseFloat(document.getElementById('minProgress').value),
+                        minProgressDefault: parseFloat(document.getElementById('minProgress').value), // RENAMED TO DEFAULT
                         minClasses: parseInt(document.getElementById('minClasses').value),
                         admissionFee: parseFloat(document.getElementById('admissionFee').value),
                         discountThreshold: parseFloat(document.getElementById('discountThreshold').value),
@@ -576,6 +589,19 @@
                         });
                     }
 
+                    // MERGE PROGRESS THRESHOLDS
+                    const progressThresholds = {};
+                    if (appState.progressThresholdsData) {
+                        appState.progressThresholdsData.forEach(function(t) {
+                            const courseName = t.course_name || t['Course Name'];
+                            const minProgress = parseFloat(t.min_progress_percentage || t['Minimum progress percentage']);
+                            if (courseName && !isNaN(minProgress) && minProgress >= 0 && minProgress <= 100) {
+                                progressThresholds[courseName] = minProgress;
+                            }
+                        });
+                    }
+                    // END MERGE PROGRESS THRESHOLDS
+
                     enrollments.forEach(function(e) {
                         if (!courseMap[e.course]) {
                             const idx = Object.keys(courseMap).length + 1;
@@ -585,6 +611,10 @@
                                 totalClasses: 50
                             };
                         }
+                        // ADD PROGRESS THRESHOLD TO COURSEMAP
+                        courseMap[e.course].minProgress = progressThresholds[e.course] !== undefined 
+                            ? progressThresholds[e.course]
+                            : settings.minProgressDefault;
                     });
 
                     updateProgress(70, '🔄 Calculating eligibility...');
@@ -596,7 +626,12 @@
                         const totalClasses = courseInfo.totalClasses || 50;
                         const classesWatched = Math.round((enroll.progress / 100) * totalClasses);
                         
-                        const meetsProgress = enroll.progress >= settings.minProgress;
+                        // USE COURSE-SPECIFIC OR DEFAULT MIN PROGRESS
+                        const minProgressForCourse = courseInfo.minProgress !== undefined 
+                            ? courseInfo.minProgress
+                            : settings.minProgressDefault; 
+                        
+                        const meetsProgress = enroll.progress >= minProgressForCourse;
                         const meetsClasses = classesWatched >= settings.minClasses;
                         const isEligible = meetsProgress && meetsClasses;
                         

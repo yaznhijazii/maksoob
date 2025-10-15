@@ -745,27 +745,176 @@
             `;
             document.getElementById('summaryCards').innerHTML = summaryHTML;
             
-            // Teacher table
+            // Course table (grouped by teacher and course)
+            const courseGroups = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}`);
+            const courseData = Object.entries(courseGroups).map(([key, orders]) => ({
+                teacherId: orders[0].teacherId,
+                teacherName: orders[0].teacherName,
+                course: orders[0].course,
+                orderCount: orders.length,
+                revenue: _.sumBy(orders, 'eligibleAmount')
+            })).sort((a, b) => a.teacherName.localeCompare(b.teacherName) || a.course.localeCompare(b.course));
+            
+            // Get teacher payout lookup
+            const teacherPayoutMap = {};
+            r.teacherPayouts.forEach(t => {
+                teacherPayoutMap[t.teacherId] = t.payout;
+            });
+            
             const tableHTML = `
                 <thead>
                     <tr>
-                        <th>Teacher ID</th>
                         <th>Teacher Name</th>
+                        <th>Course Name</th>
                         <th>Eligible Orders</th>
-                        <th>Share %</th>
-                        <th>Payout Amount</th>
+                        <th>Course Revenue</th>
+                        <th>Teacher Payout</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${r.teacherPayouts.map(t => `
+                    ${courseData.map((c, idx) => {
+                        const showPayout = idx === 0 || courseData[idx-1].teacherId !== c.teacherId;
+                        const teacherPayout = teacherPayoutMap[c.teacherId];
+                        return `
                         <tr>
-                            <td>${t.teacherId}</td>
-                            <td>${t.teacherName}</td>
-                            <td>${t.orderCount}</td>
-                            <td>${(t.shareRatio * 100).toFixed(1)}%</td>
-                            <td><strong>$${t.payout.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong></td>
+                            <td>${c.teacherName}</td>
+                            <td><strong>${c.course}</strong></td>
+                            <td>${c.orderCount}</td>
+                            <td>${c.revenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td>${showPayout ? '<strong>
+            document.getElementById('resultsTable').innerHTML = tableHTML;
+            
+            // Show results
+            document.getElementById('results').classList.add('show');
+        }
+
+        function exportCSV(type) {
+            const r = state.results;
+            let data, filename;
+            
+            if (type === 'teacher') {
+                data = r.teacherPayouts.map(t => ({
+                    teacher_id: t.teacherId,
+                    teacher_name: t.teacherName,
+                    quarter: r.settings.quarter,
+                    year: r.settings.year,
+                    eligible_orders: t.orderCount,
+                    share_ratio: t.shareRatio.toFixed(4),
+                    payout_amount: t.payout.toFixed(2),
+                    total_quarter_revenue: r.quarterRevenue.toFixed(2),
+                    teacher_pool_pct: (r.settings.poolPercent * 100).toFixed(0)
+                }));
+                filename = `teacher_summary_Q${r.settings.quarter}_${r.settings.year}.csv`;
+            } else if (type === 'course') {
+                const grouped = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}_${e.month}`);
+                data = Object.values(grouped).map(group => ({
+                    teacher_id: group[0].teacherId,
+                    teacher_name: group[0].teacherName,
+                    course_name: group[0].course,
+                    month: group[0].month,
+                    year: group[0].year,
+                    eligible_orders: group.length,
+                    eligible_amount: _.sumBy(group, 'eligibleAmount').toFixed(2),
+                    admission_included: group.filter(e => e.includeAdmission).length
+                }));
+                filename = `course_detail_Q${r.settings.quarter}_${r.settings.year}.csv`;
+            } else {
+                const grouped = _.groupBy(r.allEligibility, e => `${e.email}_${e.course}`);
+                data = Object.values(grouped).map(group => ({
+                    user_email: group[0].email,
+                    course_name: group[0].course,
+                    months_charged: group.map(e => e.month).join(','),
+                    total_charged: group.length,
+                    first_months: group.filter(e => e.isFirstMonth).length,
+                    admission_included: group.filter(e => e.includeAdmission).length,
+                    order_ids: group.map(e => e.orderId).join(',')
+                }));
+                filename = `student_audit_Q${r.settings.quarter}_${r.settings.year}.csv`;
+            }
+            
+            const csv = Papa.unparse(data);
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportExcel() {
+            const r = state.results;
+            
+            // Prepare sheets
+            const teacherData = r.teacherPayouts.map(t => ({
+                'Teacher ID': t.teacherId,
+                'Teacher Name': t.teacherName,
+                'Quarter': r.settings.quarter,
+                'Year': r.settings.year,
+                'Eligible Orders': t.orderCount,
+                'Share Ratio': t.shareRatio.toFixed(4),
+                'Payout Amount': t.payout.toFixed(2),
+                'Total Quarter Revenue': r.quarterRevenue.toFixed(2),
+                'Teacher Pool %': (r.settings.poolPercent * 100).toFixed(0)
+            }));
+            
+            const courseGrouped = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}_${e.month}`);
+            const courseData = Object.values(courseGrouped).map(group => ({
+                'Teacher ID': group[0].teacherId,
+                'Teacher Name': group[0].teacherName,
+                'Course Name': group[0].course,
+                'Month': group[0].month,
+                'Year': group[0].year,
+                'Eligible Orders': group.length,
+                'Eligible Amount': _.sumBy(group, 'eligibleAmount').toFixed(2),
+                'Admission Included': group.filter(e => e.includeAdmission).length
+            }));
+            
+            const studentGrouped = _.groupBy(r.allEligibility, e => `${e.email}_${e.course}`);
+            const studentData = Object.values(studentGrouped).map(group => ({
+                'User Email': group[0].email,
+                'Course Name': group[0].course,
+                'Months Charged': group.map(e => e.month).join(','),
+                'Total Charged': group.length,
+                'First Months': group.filter(e => e.isFirstMonth).length,
+                'Admission Included': group.filter(e => e.includeAdmission).length,
+                'Order IDs': group.map(e => e.orderId).join(',')
+            }));
+            
+            const summaryData = [
+                { 'Metric': 'Quarter', 'Value': `Q${r.settings.quarter}` },
+                { 'Metric': 'Year', 'Value': r.settings.year },
+                { 'Metric': 'Total Eligible Revenue', 'Value': `${r.quarterRevenue.toFixed(2)}` },
+                { 'Metric': 'Teacher Pool', 'Value': `${r.teacherPool.toFixed(2)}` },
+                { 'Metric': 'Total Eligible Orders', 'Value': r.totalOrders },
+                { 'Metric': 'Number of Teachers', 'Value': r.teacherPayouts.length },
+                { 'Metric': 'Generated At', 'Value': new Date().toLocaleString() }
+            ];
+            
+            // Create workbook
+            const wb = XLSX.utils.book_new();
+            
+            const ws1 = XLSX.utils.json_to_sheet(summaryData);
+            XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+            
+            const ws2 = XLSX.utils.json_to_sheet(teacherData);
+            XLSX.utils.book_append_sheet(wb, ws2, 'Teacher Summary');
+            
+            const ws3 = XLSX.utils.json_to_sheet(courseData);
+            XLSX.utils.book_append_sheet(wb, ws3, 'Course Detail');
+            
+            const ws4 = XLSX.utils.json_to_sheet(studentData);
+            XLSX.utils.book_append_sheet(wb, ws4, 'Student Audit');
+            
+            // Download
+            XLSX.writeFile(wb, `exports_Q${r.settings.quarter}_${r.settings.year}.xlsx`);
+        }
+    </script>
+</body>
+</html>
+                 + teacherPayout.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</strong>' : ''}</td>
                         </tr>
-                    `).join('')}
+                    `}).join('')}
                 </tbody>
             `;
             document.getElementById('resultsTable').innerHTML = tableHTML;

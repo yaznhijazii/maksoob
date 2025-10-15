@@ -222,6 +222,7 @@
             background: white;
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
         }
         
         table {
@@ -314,7 +315,6 @@
         </div>
         
         <div class="content">
-            <!-- Step 1: Upload Files -->
             <div class="step">
                 <h2>Step 1: Upload Data Files</h2>
                 <div class="file-upload">
@@ -331,16 +331,15 @@
                     </div>
                     
                     <div class="file-input-wrapper" id="coursesWrapper">
-                        <label for="coursesFile">🎓 Courses Mapping (Optional - CSV/Excel)</label>
+                        <label for="coursesFile">🎓 Courses Mapping (Optional)</label>
                         <span class="file-status" id="coursesStatus"></span>
                         <input type="file" id="coursesFile" accept=".csv,.xlsx,.xls">
                     </div>
                 </div>
             </div>
             
-            <!-- Step 2: Configure Settings -->
             <div class="step">
-                <h2>Step 2: Configure Calculation Settings</h2>
+                <h2>Step 2: Configure Settings</h2>
                 <div class="settings-grid">
                     <div class="form-group">
                         <label>Quarter</label>
@@ -374,7 +373,7 @@
                     
                     <div class="form-group">
                         <label>Discount Threshold %</label>
-                        <input type="number" id="discountThreshold" value="30" min="0" max="100" step="0.1">
+                        <input type="number" id="discountThreshold" value="30" min="0" max="100">
                     </div>
                     
                     <div class="form-group">
@@ -387,14 +386,13 @@
                     
                     <div class="form-group">
                         <label>Teacher Pool %</label>
-                        <input type="number" id="poolPercent" value="40" min="0" max="100" step="1">
+                        <input type="number" id="poolPercent" value="40" min="0" max="100">
                     </div>
                 </div>
             </div>
             
-            <!-- Step 3: Calculate -->
             <div class="step">
-                <h2>Step 3: Calculate Payouts</h2>
+                <h2>Step 3: Calculate</h2>
                 <button class="btn btn-primary" id="calculateBtn" disabled>
                     🧮 Calculate Teacher Payouts
                 </button>
@@ -406,23 +404,22 @@
                 </div>
             </div>
             
-            <!-- Results -->
             <div class="results" id="results">
                 <div class="step">
-                    <h2>💰 Calculation Results</h2>
+                    <h2>💰 Results</h2>
                     
                     <div class="summary-cards" id="summaryCards"></div>
                     
                     <div class="table-wrapper">
-                        <h3 style="padding: 20px 20px 10px;">Teacher Payouts</h3>
+                        <h3 style="padding: 20px 20px 10px;">Orders by Course</h3>
                         <table id="resultsTable"></table>
                     </div>
                     
                     <div class="export-buttons">
-                        <button class="btn btn-success" id="exportTeacherCSV">📥 Download Teacher Summary (CSV)</button>
-                        <button class="btn btn-success" id="exportCourseCSV">📥 Download Course Detail (CSV)</button>
-                        <button class="btn btn-success" id="exportAuditCSV">📥 Download Student Audit (CSV)</button>
-                        <button class="btn btn-success" id="exportExcel">📊 Download All (Excel)</button>
+                        <button class="btn btn-success" id="exportTeacherCSV">📥 Teacher Summary CSV</button>
+                        <button class="btn btn-success" id="exportCourseCSV">📥 Course Detail CSV</button>
+                        <button class="btn btn-success" id="exportAuditCSV">📥 Student Audit CSV</button>
+                        <button class="btn btn-success" id="exportExcel">📊 Export All (Excel)</button>
                     </div>
                 </div>
             </div>
@@ -430,26 +427,29 @@
     </div>
 
     <script>
-        // State management
-        let state = {
+        let appState = {
             salesData: null,
             enrollmentsData: null,
             coursesData: null,
             results: null
         };
 
-        // File upload handlers
-        document.getElementById('salesFile').addEventListener('change', (e) => loadFile(e, 'sales'));
-        document.getElementById('enrollmentsFile').addEventListener('change', (e) => loadFile(e, 'enrollments'));
-        document.getElementById('coursesFile').addEventListener('change', (e) => loadFile(e, 'courses'));
+        document.getElementById('salesFile').addEventListener('change', function(e) {
+            loadFile(e, 'sales');
+        });
         
-        // Calculate button
+        document.getElementById('enrollmentsFile').addEventListener('change', function(e) {
+            loadFile(e, 'enrollments');
+        });
+        
+        document.getElementById('coursesFile').addEventListener('change', function(e) {
+            loadFile(e, 'courses');
+        });
+        
         document.getElementById('calculateBtn').addEventListener('click', calculatePayouts);
-        
-        // Export buttons
-        document.getElementById('exportTeacherCSV').addEventListener('click', () => exportCSV('teacher'));
-        document.getElementById('exportCourseCSV').addEventListener('click', () => exportCSV('course'));
-        document.getElementById('exportAuditCSV').addEventListener('click', () => exportCSV('audit'));
+        document.getElementById('exportTeacherCSV').addEventListener('click', function() { exportCSV('teacher'); });
+        document.getElementById('exportCourseCSV').addEventListener('click', function() { exportCSV('course'); });
+        document.getElementById('exportAuditCSV').addEventListener('click', function() { exportCSV('audit'); });
         document.getElementById('exportExcel').addEventListener('click', exportExcel);
 
         function loadFile(event, type) {
@@ -459,7 +459,7 @@
             const reader = new FileReader();
             const ext = file.name.split('.').pop().toLowerCase();
 
-            reader.onload = (e) => {
+            reader.onload = function(e) {
                 try {
                     let data;
                     if (ext === 'csv') {
@@ -471,13 +471,13 @@
                         data = XLSX.utils.sheet_to_json(firstSheet);
                     }
 
-                    state[type + 'Data'] = data;
-                    document.getElementById(type + 'Status').textContent = `✓ ${data.length} rows loaded`;
+                    appState[type + 'Data'] = data;
+                    document.getElementById(type + 'Status').textContent = '✓ ' + data.length + ' rows';
                     document.getElementById(type + 'Wrapper').classList.add('loaded');
                     
-                    checkReadyToCalculate();
+                    checkReady();
                 } catch (error) {
-                    alert(`Error loading ${type} file: ${error.message}`);
+                    alert('Error loading file: ' + error.message);
                 }
             };
 
@@ -488,13 +488,14 @@
             }
         }
 
-        function checkReadyToCalculate() {
-            const ready = state.salesData && state.enrollmentsData;
+        function checkReady() {
+            const ready = appState.salesData && appState.enrollmentsData;
             document.getElementById('calculateBtn').disabled = !ready;
         }
 
         function normalizeEmail(email) {
-            return email ? String(email).trim().toLowerCase() : '';
+            if (!email) return '';
+            return String(email).trim().toLowerCase();
         }
 
         function getQuarter(month) {
@@ -507,17 +508,6 @@
             return isNaN(d.getTime()) ? null : d;
         }
 
-        function inferClassesWatched(progressPct, totalClasses) {
-            if (!progressPct || !totalClasses) return 0;
-            return Math.round((progressPct / 100) * totalClasses);
-        }
-
-        function computeDiscount(total, isFirstMonth) {
-            const listPrice = isFirstMonth ? 29.99 : 19.99;
-            const discount = (1 - (total / listPrice)) * 100;
-            return Math.max(0, discount);
-        }
-
         function updateProgress(percent, message) {
             document.getElementById('progressContainer').classList.remove('hidden');
             document.getElementById('progressBar').style.width = percent + '%';
@@ -525,9 +515,9 @@
         }
 
         function calculatePayouts() {
-            updateProgress(10, '🔄 Normalizing data...');
+            updateProgress(10, '🔄 Starting calculation...');
             
-            setTimeout(() => {
+            setTimeout(function() {
                 try {
                     const settings = {
                         quarter: parseInt(document.getElementById('quarter').value),
@@ -540,23 +530,24 @@
                         poolPercent: parseFloat(document.getElementById('poolPercent').value) / 100
                     };
 
-                    updateProgress(30, '🔄 Processing sales orders...');
+                    updateProgress(30, '🔄 Processing sales...');
                     
-                    // Normalize sales data
-                    const sales = state.salesData.map(order => ({
-                        ...order,
-                        email: normalizeEmail(order.user_email),
-                        timestamp: parseDate(order.timestamp),
-                        total: parseFloat(order.total) || 0,
-                        subtotal: parseFloat(order.subtotal) || 0,
-                        status: String(order.status || '').toLowerCase()
-                    })).filter(o => 
-                        o.timestamp && 
-                        o.total > 0 && 
-                        ['completed', 'paid', 'success', 'succeeded'].includes(o.status)
-                    );
+                    const sales = appState.salesData.map(function(order) {
+                        return {
+                            id: order.id,
+                            email: normalizeEmail(order.user_email),
+                            timestamp: parseDate(order.timestamp),
+                            total: parseFloat(order.total) || 0,
+                            subtotal: parseFloat(order.subtotal) || 0,
+                            status: String(order.status || '').toLowerCase(),
+                            subId: order.subscription_transaction_id
+                        };
+                    }).filter(function(o) {
+                        return o.timestamp && o.total > 0 && 
+                               ['completed', 'paid', 'success', 'succeeded'].indexOf(o.status) >= 0;
+                    });
 
-                    sales.forEach(o => {
+                    sales.forEach(function(o) {
                         o.month = o.timestamp.getMonth() + 1;
                         o.year = o.timestamp.getFullYear();
                         o.quarter = getQuarter(o.month);
@@ -564,20 +555,20 @@
 
                     updateProgress(50, '🔄 Processing enrollments...');
                     
-                    // Normalize enrollments
-                    const enrollments = state.enrollmentsData.map(e => ({
-                        email: normalizeEmail(e['User Email'] || e.user_email),
-                        course: e['Course Name'] || e.course_name,
-                        progress: parseFloat(e['User Progress (%)'] || e.progress || 0),
-                        enrollmentDate: parseDate(e['Enrollment Date'] || e.enrollment_date),
-                        classesWatched: e['Classes Watched'] || e.classes_watched
-                    }));
+                    const enrollments = appState.enrollmentsData.map(function(e) {
+                        return {
+                            email: normalizeEmail(e['User Email'] || e.user_email),
+                            course: e['Course Name'] || e.course_name,
+                            progress: parseFloat(e['User Progress (%)'] || e.progress || 0),
+                            enrollmentDate: parseDate(e['Enrollment Date'] || e.enrollment_date)
+                        };
+                    });
 
-                    // Create course map
                     const courseMap = {};
-                    if (state.coursesData) {
-                        state.coursesData.forEach(c => {
-                            courseMap[c.course_name || c['Course Name']] = {
+                    if (appState.coursesData) {
+                        appState.coursesData.forEach(function(c) {
+                            const courseName = c.course_name || c['Course Name'];
+                            courseMap[courseName] = {
                                 teacherId: c.teacher_id,
                                 teacherName: c.teacher_name,
                                 totalClasses: parseInt(c.total_classes) || 50
@@ -585,12 +576,12 @@
                         });
                     }
 
-                    // Auto-generate course map if not provided
-                    enrollments.forEach(e => {
+                    enrollments.forEach(function(e) {
                         if (!courseMap[e.course]) {
+                            const idx = Object.keys(courseMap).length + 1;
                             courseMap[e.course] = {
-                                teacherId: `T${Object.keys(courseMap).length + 1}`,
-                                teacherName: `Teacher ${Object.keys(courseMap).length + 1}`,
+                                teacherId: 'T' + idx,
+                                teacherName: 'Teacher ' + idx,
                                 totalClasses: 50
                             };
                         }
@@ -598,51 +589,47 @@
 
                     updateProgress(70, '🔄 Calculating eligibility...');
                     
-                    // Build eligibility
                     const eligibility = [];
                     
-                    enrollments.forEach(enroll => {
+                    enrollments.forEach(function(enroll) {
                         const courseInfo = courseMap[enroll.course] || {};
                         const totalClasses = courseInfo.totalClasses || 50;
-                        const classesWatched = enroll.classesWatched || 
-                            inferClassesWatched(enroll.progress, totalClasses);
+                        const classesWatched = Math.round((enroll.progress / 100) * totalClasses);
                         
                         const meetsProgress = enroll.progress >= settings.minProgress;
                         const meetsClasses = classesWatched >= settings.minClasses;
                         const isEligible = meetsProgress && meetsClasses;
                         
-                        const studentOrders = sales.filter(o => 
-                            o.email === enroll.email &&
-                            o.timestamp >= enroll.enrollmentDate
-                        ).sort((a, b) => a.timestamp - b.timestamp);
+                        if (!isEligible) return;
                         
-                        if (!isEligible || studentOrders.length === 0) return;
+                        const studentOrders = sales.filter(function(o) {
+                            return o.email === enroll.email && o.timestamp >= enroll.enrollmentDate;
+                        }).sort(function(a, b) {
+                            return a.timestamp - b.timestamp;
+                        });
                         
-                        // Track subscription IDs and first months
+                        if (studentOrders.length === 0) return;
+                        
                         const subIds = {};
-                        studentOrders.forEach(o => {
-                            const subId = o.subscription_transaction_id;
-                            if (subId && !subIds[subId]) {
-                                subIds[subId] = o.timestamp;
+                        studentOrders.forEach(function(o) {
+                            if (o.subId && !subIds[o.subId]) {
+                                subIds[o.subId] = o.timestamp.getTime();
                             }
                         });
                         
                         let eligibleCount = 0;
                         
-                        studentOrders.forEach(order => {
+                        studentOrders.forEach(function(order) {
                             if (eligibleCount >= 3) return;
                             
-                            const subId = order.subscription_transaction_id;
-                            const isFirstMonth = subId && subIds[subId] && 
-                                order.timestamp.getTime() === subIds[subId].getTime();
+                            const isFirstMonth = order.subId && subIds[order.subId] === order.timestamp.getTime();
                             
-                            const baseAmount = settings.revenueBase === 'total' ? 
-                                order.total : order.subtotal;
+                            const baseAmount = settings.revenueBase === 'total' ? order.total : order.subtotal;
                             
-                            const discountPct = computeDiscount(order.total, isFirstMonth);
-                            const includeAdmission = isFirstMonth && 
-                                discountPct > settings.discountThreshold;
+                            const listPrice = isFirstMonth ? 29.99 : 19.99;
+                            const discountPct = Math.max(0, (1 - (order.total / listPrice)) * 100);
                             
+                            const includeAdmission = isFirstMonth && discountPct > settings.discountThreshold;
                             const admissionComponent = includeAdmission ? settings.admissionFee : 0;
                             const eligibleAmount = baseAmount + admissionComponent;
                             
@@ -655,62 +642,70 @@
                                 month: order.month,
                                 year: order.year,
                                 quarter: order.quarter,
-                                isFirstMonth,
-                                discountPct,
-                                includeAdmission,
-                                eligibleAmount
+                                isFirstMonth: isFirstMonth,
+                                discountPct: discountPct,
+                                includeAdmission: includeAdmission,
+                                eligibleAmount: eligibleAmount
                             });
                             
                             eligibleCount++;
                         });
                     });
 
-                    updateProgress(90, '🔄 Calculating teacher payouts...');
+                    updateProgress(90, '🔄 Calculating payouts...');
                     
-                    // Filter to selected quarter
-                    const quarterEligible = eligibility.filter(e => 
-                        e.quarter === settings.quarter && e.year === settings.year
-                    );
+                    const quarterEligible = eligibility.filter(function(e) {
+                        return e.quarter === settings.quarter && e.year === settings.year;
+                    });
                     
-                    const quarterRevenue = _.sumBy(quarterEligible, 'eligibleAmount');
+                    let quarterRevenue = 0;
+                    quarterEligible.forEach(function(e) {
+                        quarterRevenue += e.eligibleAmount;
+                    });
+                    
                     const teacherPool = quarterRevenue * settings.poolPercent;
                     
-                    // Group by teacher
                     const teacherGroups = _.groupBy(quarterEligible, 'teacherId');
-                    const teacherPayouts = Object.entries(teacherGroups).map(([teacherId, orders]) => {
+                    const teacherPayouts = [];
+                    
+                    for (const teacherId in teacherGroups) {
+                        const orders = teacherGroups[teacherId];
                         const orderCount = orders.length;
                         const shareRatio = orderCount / quarterEligible.length;
                         const payout = teacherPool * shareRatio;
                         
-                        return {
-                            teacherId,
+                        teacherPayouts.push({
+                            teacherId: teacherId,
                             teacherName: orders[0].teacherName,
-                            orderCount,
-                            shareRatio,
-                            payout
-                        };
-                    }).sort((a, b) => b.payout - a.payout);
+                            orderCount: orderCount,
+                            shareRatio: shareRatio,
+                            payout: payout
+                        });
+                    }
                     
-                    // Store results
-                    state.results = {
-                        settings,
-                        quarterRevenue,
-                        teacherPool,
+                    teacherPayouts.sort(function(a, b) {
+                        return b.payout - a.payout;
+                    });
+                    
+                    appState.results = {
+                        settings: settings,
+                        quarterRevenue: quarterRevenue,
+                        teacherPool: teacherPool,
                         totalOrders: quarterEligible.length,
-                        teacherPayouts,
+                        teacherPayouts: teacherPayouts,
                         eligibility: quarterEligible,
                         allEligibility: eligibility
                     };
                     
-                    updateProgress(100, '✅ Calculation complete!');
+                    updateProgress(100, '✅ Complete!');
                     
-                    setTimeout(() => {
+                    setTimeout(function() {
                         displayResults();
                         document.getElementById('progressContainer').classList.add('hidden');
                     }, 500);
                     
                 } catch (error) {
-                    alert('Error calculating payouts: ' + error.message);
+                    alert('Calculation error: ' + error.message);
                     console.error(error);
                     document.getElementById('progressContainer').classList.add('hidden');
                 }
@@ -718,118 +713,150 @@
         }
 
         function displayResults() {
-            const r = state.results;
+            const r = appState.results;
             
-            // Summary cards
-            const summaryHTML = `
-                <div class="card">
-                    <h3>Quarter</h3>
-                    <div class="value">Q${r.settings.quarter} ${r.settings.year}</div>
-                </div>
-                <div class="card">
-                    <h3>Total Revenue</h3>
-                    <div class="value">$${r.quarterRevenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-                </div>
-                <div class="card">
-                    <h3>Teacher Pool</h3>
-                    <div class="value">$${r.teacherPool.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-                </div>
-                <div class="card">
-                    <h3>Total Orders</h3>
-                    <div class="value">${r.totalOrders}</div>
-                </div>
-                <div class="card">
-                    <h3>Teachers Paid</h3>
-                    <div class="value">${r.teacherPayouts.length}</div>
-                </div>
-            `;
+            let summaryHTML = '';
+            summaryHTML += '<div class="card"><h3>Quarter</h3><div class="value">Q' + r.settings.quarter + ' ' + r.settings.year + '</div></div>';
+            summaryHTML += '<div class="card"><h3>Total Revenue</h3><div class="value">$' + r.quarterRevenue.toFixed(2) + '</div></div>';
+            summaryHTML += '<div class="card"><h3>Teacher Pool</h3><div class="value">$' + r.teacherPool.toFixed(2) + '</div></div>';
+            summaryHTML += '<div class="card"><h3>Total Orders</h3><div class="value">' + r.totalOrders + '</div></div>';
+            summaryHTML += '<div class="card"><h3>Teachers</h3><div class="value">' + r.teacherPayouts.length + '</div></div>';
+            
             document.getElementById('summaryCards').innerHTML = summaryHTML;
             
-            // Course table (grouped by teacher and course)
-            const courseGroups = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}`);
-            const courseData = Object.entries(courseGroups).map(([key, orders]) => ({
-                teacherId: orders[0].teacherId,
-                teacherName: orders[0].teacherName,
-                course: orders[0].course,
-                orderCount: orders.length,
-                revenue: _.sumBy(orders, 'eligibleAmount')
-            })).sort((a, b) => a.teacherName.localeCompare(b.teacherName) || a.course.localeCompare(b.course));
+            const courseGroups = _.groupBy(r.eligibility, function(e) {
+                return e.teacherId + '_' + e.course;
+            });
             
-            // Get teacher payout lookup
+            const courseData = [];
+            for (const key in courseGroups) {
+                const orders = courseGroups[key];
+                let revenue = 0;
+                orders.forEach(function(o) {
+                    revenue += o.eligibleAmount;
+                });
+                
+                courseData.push({
+                    teacherId: orders[0].teacherId,
+                    teacherName: orders[0].teacherName,
+                    course: orders[0].course,
+                    orderCount: orders.length,
+                    revenue: revenue
+                });
+            }
+            
+            courseData.sort(function(a, b) {
+                const nameCompare = a.teacherName.localeCompare(b.teacherName);
+                if (nameCompare !== 0) return nameCompare;
+                return a.course.localeCompare(b.course);
+            });
+            
             const teacherPayoutMap = {};
-            r.teacherPayouts.forEach(t => {
+            r.teacherPayouts.forEach(function(t) {
                 teacherPayoutMap[t.teacherId] = t.payout;
             });
             
-            const tableHTML = `
-                <thead>
-                    <tr>
-                        <th>Teacher Name</th>
-                        <th>Course Name</th>
-                        <th>Eligible Orders</th>
-                        <th>Course Revenue</th>
-                        <th>Teacher Payout</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${courseData.map((c, idx) => {
-                        const showPayout = idx === 0 || courseData[idx-1].teacherId !== c.teacherId;
-                        const teacherPayout = teacherPayoutMap[c.teacherId];
-                        return `
-                        <tr>
-                            <td>${c.teacherName}</td>
-                            <td><strong>${c.course}</strong></td>
-                            <td>${c.orderCount}</td>
-                            <td>${c.revenue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td>${showPayout ? '<strong>
-            document.getElementById('resultsTable').innerHTML = tableHTML;
+            let tableHTML = '<thead><tr>';
+            tableHTML += '<th>Teacher</th>';
+            tableHTML += '<th>Course</th>';
+            tableHTML += '<th>Orders</th>';
+            tableHTML += '<th>Course Revenue</th>';
+            tableHTML += '<th>Teacher Payout</th>';
+            tableHTML += '</tr></thead><tbody>';
             
-            // Show results
+            for (let i = 0; i < courseData.length; i++) {
+                const c = courseData[i];
+                const showPayout = i === 0 || courseData[i-1].teacherId !== c.teacherId;
+                const teacherPayout = teacherPayoutMap[c.teacherId] || 0;
+                
+                tableHTML += '<tr>';
+                tableHTML += '<td>' + c.teacherName + '</td>';
+                tableHTML += '<td><strong>' + c.course + '</strong></td>';
+                tableHTML += '<td>' + c.orderCount + '</td>';
+                tableHTML += '<td>$' + c.revenue.toFixed(2) + '</td>';
+                tableHTML += '<td>' + (showPayout ? '<strong>$' + teacherPayout.toFixed(2) + '</strong>' : '') + '</td>';
+                tableHTML += '</tr>';
+            }
+            
+            tableHTML += '</tbody>';
+            
+            document.getElementById('resultsTable').innerHTML = tableHTML;
             document.getElementById('results').classList.add('show');
         }
 
         function exportCSV(type) {
-            const r = state.results;
-            let data, filename;
+            const r = appState.results;
+            let data = [];
+            let filename = '';
             
             if (type === 'teacher') {
-                data = r.teacherPayouts.map(t => ({
-                    teacher_id: t.teacherId,
-                    teacher_name: t.teacherName,
-                    quarter: r.settings.quarter,
-                    year: r.settings.year,
-                    eligible_orders: t.orderCount,
-                    share_ratio: t.shareRatio.toFixed(4),
-                    payout_amount: t.payout.toFixed(2),
-                    total_quarter_revenue: r.quarterRevenue.toFixed(2),
-                    teacher_pool_pct: (r.settings.poolPercent * 100).toFixed(0)
-                }));
-                filename = `teacher_summary_Q${r.settings.quarter}_${r.settings.year}.csv`;
+                r.teacherPayouts.forEach(function(t) {
+                    data.push({
+                        teacher_id: t.teacherId,
+                        teacher_name: t.teacherName,
+                        quarter: r.settings.quarter,
+                        year: r.settings.year,
+                        eligible_orders: t.orderCount,
+                        payout_amount: t.payout.toFixed(2)
+                    });
+                });
+                filename = 'teacher_summary_Q' + r.settings.quarter + '_' + r.settings.year + '.csv';
             } else if (type === 'course') {
-                const grouped = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}_${e.month}`);
-                data = Object.values(grouped).map(group => ({
-                    teacher_id: group[0].teacherId,
-                    teacher_name: group[0].teacherName,
-                    course_name: group[0].course,
-                    month: group[0].month,
-                    year: group[0].year,
-                    eligible_orders: group.length,
-                    eligible_amount: _.sumBy(group, 'eligibleAmount').toFixed(2),
-                    admission_included: group.filter(e => e.includeAdmission).length
-                }));
-                filename = `course_detail_Q${r.settings.quarter}_${r.settings.year}.csv`;
+                const grouped = _.groupBy(r.eligibility, function(e) {
+                    return e.teacherId + '_' + e.course + '_' + e.month;
+                });
+                
+                for (const key in grouped) {
+                    const group = grouped[key];
+                    let revenue = 0;
+                    let admCount = 0;
+                    group.forEach(function(o) {
+                        revenue += o.eligibleAmount;
+                        if (o.includeAdmission) admCount++;
+                    });
+                    
+                    data.push({
+                        teacher_id: group[0].teacherId,
+                        teacher_name: group[0].teacherName,
+                        course_name: group[0].course,
+                        month: group[0].month,
+                        year: group[0].year,
+                        eligible_orders: group.length,
+                        eligible_amount: revenue.toFixed(2),
+                        admission_included: admCount
+                    });
+                }
+                filename = 'course_detail_Q' + r.settings.quarter + '_' + r.settings.year + '.csv';
             } else {
-                const grouped = _.groupBy(r.allEligibility, e => `${e.email}_${e.course}`);
-                data = Object.values(grouped).map(group => ({
-                    user_email: group[0].email,
-                    course_name: group[0].course,
-                    months_charged: group.map(e => e.month).join(','),
-                    total_charged: group.length,
-                    first_months: group.filter(e => e.isFirstMonth).length,
-                    admission_included: group.filter(e => e.includeAdmission).length,
-                    order_ids: group.map(e => e.orderId).join(',')
-                }));
-                filename = `student_audit_Q${r.settings.quarter}_${r.settings.year}.csv`;
+                const grouped = _.groupBy(r.allEligibility, function(e) {
+                    return e.email + '_' + e.course;
+                });
+                
+                for (const key in grouped) {
+                    const group = grouped[key];
+                    const months = [];
+                    const orderIds = [];
+                    let firstCount = 0;
+                    let admCount = 0;
+                    
+                    group.forEach(function(o) {
+                        months.push(o.month);
+                        orderIds.push(o.orderId);
+                        if (o.isFirstMonth) firstCount++;
+                        if (o.includeAdmission) admCount++;
+                    });
+                    
+                    data.push({
+                        user_email: group[0].email,
+                        course_name: group[0].course,
+                        months_charged: months.join(','),
+                        total_charged: group.length,
+                        first_months: firstCount,
+                        admission_included: admCount,
+                        order_ids: orderIds.join(',')
+                    });
+                }
+                filename = 'student_audit_Q' + r.settings.quarter + '_' + r.settings.year + '.csv';
             }
             
             const csv = Papa.unparse(data);
@@ -843,55 +870,86 @@
         }
 
         function exportExcel() {
-            const r = state.results;
+            const r = appState.results;
             
-            // Prepare sheets
-            const teacherData = r.teacherPayouts.map(t => ({
-                'Teacher ID': t.teacherId,
-                'Teacher Name': t.teacherName,
-                'Quarter': r.settings.quarter,
-                'Year': r.settings.year,
-                'Eligible Orders': t.orderCount,
-                'Share Ratio': t.shareRatio.toFixed(4),
-                'Payout Amount': t.payout.toFixed(2),
-                'Total Quarter Revenue': r.quarterRevenue.toFixed(2),
-                'Teacher Pool %': (r.settings.poolPercent * 100).toFixed(0)
-            }));
+            const teacherData = [];
+            r.teacherPayouts.forEach(function(t) {
+                teacherData.push({
+                    'Teacher ID': t.teacherId,
+                    'Teacher Name': t.teacherName,
+                    'Quarter': r.settings.quarter,
+                    'Year': r.settings.year,
+                    'Eligible Orders': t.orderCount,
+                    'Payout Amount': t.payout.toFixed(2)
+                });
+            });
             
-            const courseGrouped = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}_${e.month}`);
-            const courseData = Object.values(courseGrouped).map(group => ({
-                'Teacher ID': group[0].teacherId,
-                'Teacher Name': group[0].teacherName,
-                'Course Name': group[0].course,
-                'Month': group[0].month,
-                'Year': group[0].year,
-                'Eligible Orders': group.length,
-                'Eligible Amount': _.sumBy(group, 'eligibleAmount').toFixed(2),
-                'Admission Included': group.filter(e => e.includeAdmission).length
-            }));
+            const courseGrouped = _.groupBy(r.eligibility, function(e) {
+                return e.teacherId + '_' + e.course + '_' + e.month;
+            });
             
-            const studentGrouped = _.groupBy(r.allEligibility, e => `${e.email}_${e.course}`);
-            const studentData = Object.values(studentGrouped).map(group => ({
-                'User Email': group[0].email,
-                'Course Name': group[0].course,
-                'Months Charged': group.map(e => e.month).join(','),
-                'Total Charged': group.length,
-                'First Months': group.filter(e => e.isFirstMonth).length,
-                'Admission Included': group.filter(e => e.includeAdmission).length,
-                'Order IDs': group.map(e => e.orderId).join(',')
-            }));
+            const courseData = [];
+            for (const key in courseGrouped) {
+                const group = courseGrouped[key];
+                let revenue = 0;
+                let admCount = 0;
+                group.forEach(function(o) {
+                    revenue += o.eligibleAmount;
+                    if (o.includeAdmission) admCount++;
+                });
+                
+                courseData.push({
+                    'Teacher ID': group[0].teacherId,
+                    'Teacher Name': group[0].teacherName,
+                    'Course Name': group[0].course,
+                    'Month': group[0].month,
+                    'Year': group[0].year,
+                    'Eligible Orders': group.length,
+                    'Eligible Amount': revenue.toFixed(2),
+                    'Admission Included': admCount
+                });
+            }
+            
+            const studentGrouped = _.groupBy(r.allEligibility, function(e) {
+                return e.email + '_' + e.course;
+            });
+            
+            const studentData = [];
+            for (const key in studentGrouped) {
+                const group = studentGrouped[key];
+                const months = [];
+                const orderIds = [];
+                let firstCount = 0;
+                let admCount = 0;
+                
+                group.forEach(function(o) {
+                    months.push(o.month);
+                    orderIds.push(o.orderId);
+                    if (o.isFirstMonth) firstCount++;
+                    if (o.includeAdmission) admCount++;
+                });
+                
+                studentData.push({
+                    'User Email': group[0].email,
+                    'Course Name': group[0].course,
+                    'Months Charged': months.join(','),
+                    'Total Charged': group.length,
+                    'First Months': firstCount,
+                    'Admission Included': admCount,
+                    'Order IDs': orderIds.join(',')
+                });
+            }
             
             const summaryData = [
-                { 'Metric': 'Quarter', 'Value': `Q${r.settings.quarter}` },
+                { 'Metric': 'Quarter', 'Value': 'Q' + r.settings.quarter },
                 { 'Metric': 'Year', 'Value': r.settings.year },
-                { 'Metric': 'Total Eligible Revenue', 'Value': `${r.quarterRevenue.toFixed(2)}` },
-                { 'Metric': 'Teacher Pool', 'Value': `${r.teacherPool.toFixed(2)}` },
-                { 'Metric': 'Total Eligible Orders', 'Value': r.totalOrders },
-                { 'Metric': 'Number of Teachers', 'Value': r.teacherPayouts.length },
-                { 'Metric': 'Generated At', 'Value': new Date().toLocaleString() }
+                { 'Metric': 'Total Eligible Revenue', 'Value': `$${r.quarterRevenue.toFixed(2)}` },
+                { 'Metric': 'Teacher Pool', 'Value': `$${r.teacherPool.toFixed(2)}` },
+                { 'Metric': 'Total Orders', 'Value': r.totalOrders },
+                { 'Metric': 'Teachers', 'Value': r.teacherPayouts.length },
+                { 'Metric': 'Generated', 'Value': new Date().toLocaleString() }
             ];
             
-            // Create workbook
             const wb = XLSX.utils.book_new();
             
             const ws1 = XLSX.utils.json_to_sheet(summaryData);
@@ -906,143 +964,7 @@
             const ws4 = XLSX.utils.json_to_sheet(studentData);
             XLSX.utils.book_append_sheet(wb, ws4, 'Student Audit');
             
-            // Download
-            XLSX.writeFile(wb, `exports_Q${r.settings.quarter}_${r.settings.year}.xlsx`);
-        }
-    </script>
-</body>
-</html>
-                 + teacherPayout.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</strong>' : ''}</td>
-                        </tr>
-                    `}).join('')}
-                </tbody>
-            `;
-            document.getElementById('resultsTable').innerHTML = tableHTML;
-            
-            // Show results
-            document.getElementById('results').classList.add('show');
-        }
-
-        function exportCSV(type) {
-            const r = state.results;
-            let data, filename;
-            
-            if (type === 'teacher') {
-                data = r.teacherPayouts.map(t => ({
-                    teacher_id: t.teacherId,
-                    teacher_name: t.teacherName,
-                    quarter: r.settings.quarter,
-                    year: r.settings.year,
-                    eligible_orders: t.orderCount,
-                    share_ratio: t.shareRatio.toFixed(4),
-                    payout_amount: t.payout.toFixed(2),
-                    total_quarter_revenue: r.quarterRevenue.toFixed(2),
-                    teacher_pool_pct: (r.settings.poolPercent * 100).toFixed(0)
-                }));
-                filename = `teacher_summary_Q${r.settings.quarter}_${r.settings.year}.csv`;
-            } else if (type === 'course') {
-                const grouped = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}_${e.month}`);
-                data = Object.values(grouped).map(group => ({
-                    teacher_id: group[0].teacherId,
-                    teacher_name: group[0].teacherName,
-                    course_name: group[0].course,
-                    month: group[0].month,
-                    year: group[0].year,
-                    eligible_orders: group.length,
-                    eligible_amount: _.sumBy(group, 'eligibleAmount').toFixed(2),
-                    admission_included: group.filter(e => e.includeAdmission).length
-                }));
-                filename = `course_detail_Q${r.settings.quarter}_${r.settings.year}.csv`;
-            } else {
-                const grouped = _.groupBy(r.allEligibility, e => `${e.email}_${e.course}`);
-                data = Object.values(grouped).map(group => ({
-                    user_email: group[0].email,
-                    course_name: group[0].course,
-                    months_charged: group.map(e => e.month).join(','),
-                    total_charged: group.length,
-                    first_months: group.filter(e => e.isFirstMonth).length,
-                    admission_included: group.filter(e => e.includeAdmission).length,
-                    order_ids: group.map(e => e.orderId).join(',')
-                }));
-                filename = `student_audit_Q${r.settings.quarter}_${r.settings.year}.csv`;
-            }
-            
-            const csv = Papa.unparse(data);
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function exportExcel() {
-            const r = state.results;
-            
-            // Prepare sheets
-            const teacherData = r.teacherPayouts.map(t => ({
-                'Teacher ID': t.teacherId,
-                'Teacher Name': t.teacherName,
-                'Quarter': r.settings.quarter,
-                'Year': r.settings.year,
-                'Eligible Orders': t.orderCount,
-                'Share Ratio': t.shareRatio.toFixed(4),
-                'Payout Amount': t.payout.toFixed(2),
-                'Total Quarter Revenue': r.quarterRevenue.toFixed(2),
-                'Teacher Pool %': (r.settings.poolPercent * 100).toFixed(0)
-            }));
-            
-            const courseGrouped = _.groupBy(r.eligibility, e => `${e.teacherId}_${e.course}_${e.month}`);
-            const courseData = Object.values(courseGrouped).map(group => ({
-                'Teacher ID': group[0].teacherId,
-                'Teacher Name': group[0].teacherName,
-                'Course Name': group[0].course,
-                'Month': group[0].month,
-                'Year': group[0].year,
-                'Eligible Orders': group.length,
-                'Eligible Amount': _.sumBy(group, 'eligibleAmount').toFixed(2),
-                'Admission Included': group.filter(e => e.includeAdmission).length
-            }));
-            
-            const studentGrouped = _.groupBy(r.allEligibility, e => `${e.email}_${e.course}`);
-            const studentData = Object.values(studentGrouped).map(group => ({
-                'User Email': group[0].email,
-                'Course Name': group[0].course,
-                'Months Charged': group.map(e => e.month).join(','),
-                'Total Charged': group.length,
-                'First Months': group.filter(e => e.isFirstMonth).length,
-                'Admission Included': group.filter(e => e.includeAdmission).length,
-                'Order IDs': group.map(e => e.orderId).join(',')
-            }));
-            
-            const summaryData = [
-                { 'Metric': 'Quarter', 'Value': `Q${r.settings.quarter}` },
-                { 'Metric': 'Year', 'Value': r.settings.year },
-                { 'Metric': 'Total Eligible Revenue', 'Value': `${r.quarterRevenue.toFixed(2)}` },
-                { 'Metric': 'Teacher Pool', 'Value': `${r.teacherPool.toFixed(2)}` },
-                { 'Metric': 'Total Eligible Orders', 'Value': r.totalOrders },
-                { 'Metric': 'Number of Teachers', 'Value': r.teacherPayouts.length },
-                { 'Metric': 'Generated At', 'Value': new Date().toLocaleString() }
-            ];
-            
-            // Create workbook
-            const wb = XLSX.utils.book_new();
-            
-            const ws1 = XLSX.utils.json_to_sheet(summaryData);
-            XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
-            
-            const ws2 = XLSX.utils.json_to_sheet(teacherData);
-            XLSX.utils.book_append_sheet(wb, ws2, 'Teacher Summary');
-            
-            const ws3 = XLSX.utils.json_to_sheet(courseData);
-            XLSX.utils.book_append_sheet(wb, ws3, 'Course Detail');
-            
-            const ws4 = XLSX.utils.json_to_sheet(studentData);
-            XLSX.utils.book_append_sheet(wb, ws4, 'Student Audit');
-            
-            // Download
-            XLSX.writeFile(wb, `exports_Q${r.settings.quarter}_${r.settings.year}.xlsx`);
+            XLSX.writeFile(wb, 'exports_Q' + r.settings.quarter + '_' + r.settings.year + '.xlsx');
         }
     </script>
 </body>

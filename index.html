@@ -201,6 +201,11 @@
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             border-left: 4px solid #667eea;
+            transition: border-left-color 0.3s;
+        }
+
+        .card.highlight {
+            border-left-color: #f97316; /* Orange for comparison/Q-independent metrics */
         }
         
         .card h3 {
@@ -395,6 +400,9 @@
                         <input type="number" id="poolPercent" value="40" min="0" max="100">
                     </div>
                 </div>
+                <div style="margin-top: 15px; font-size: 14px; color: #555;">
+                    **Fixed Capping Rule:** The maximum eligible amount per order is **$19.00**.
+                </div>
             </div>
             
             <div class="step">
@@ -425,6 +433,7 @@
                         <button class="btn btn-success" id="exportTeacherCSV">📥 Teacher Summary CSV</button>
                         <button class="btn btn-success" id="exportCourseCSV">📥 Course Detail CSV</button>
                         <button class="btn btn-success" id="exportAuditCSV">📥 Student Audit CSV</button>
+                        <button class="btn btn-success" id="exportPreEligibilityCSV">📥 Orders (Capped, Pre-Eligibility) CSV</button>
                         <button class="btn btn-success" id="exportExcel">📊 Export All (Excel)</button>
                     </div>
                 </div>
@@ -437,7 +446,7 @@
             salesData: null,
             enrollmentsData: null,
             coursesData: null,
-            progressThresholdsData: null, // NEW DATA FIELD
+            progressThresholdsData: null, 
             results: null
         };
 
@@ -453,16 +462,15 @@
             loadFile(e, 'courses');
         });
 
-        // NEW EVENT LISTENER
         document.getElementById('progressThresholdsFile').addEventListener('change', function(e) {
             loadFile(e, 'progressThresholds');
         });
-        // END NEW EVENT LISTENER
         
         document.getElementById('calculateBtn').addEventListener('click', calculatePayouts);
         document.getElementById('exportTeacherCSV').addEventListener('click', function() { exportCSV('teacher'); });
         document.getElementById('exportCourseCSV').addEventListener('click', function() { exportCSV('course'); });
         document.getElementById('exportAuditCSV').addEventListener('click', function() { exportCSV('audit'); });
+        document.getElementById('exportPreEligibilityCSV').addEventListener('click', function() { exportCSV('pre-eligibility'); }); // 🆕 NEW LISTENER
         document.getElementById('exportExcel').addEventListener('click', exportExcel);
 
         function loadFile(event, type) {
@@ -535,12 +543,13 @@
                     const settings = {
                         quarter: parseInt(document.getElementById('quarter').value),
                         year: parseInt(document.getElementById('year').value),
-                        minProgressDefault: parseFloat(document.getElementById('minProgress').value), // RENAMED TO DEFAULT
+                        minProgressDefault: parseFloat(document.getElementById('minProgress').value),
                         minClasses: parseInt(document.getElementById('minClasses').value),
                         admissionFee: parseFloat(document.getElementById('admissionFee').value),
                         discountThreshold: parseFloat(document.getElementById('discountThreshold').value),
                         revenueBase: document.getElementById('revenueBase').value,
-                        poolPercent: parseFloat(document.getElementById('poolPercent').value) / 100
+                        poolPercent: parseFloat(document.getElementById('poolPercent').value) / 100,
+                        maxEligibleAmount: 19.00 // Fixed cap as per user request
                     };
 
                     updateProgress(30, '🔄 Processing sales...');
@@ -566,6 +575,55 @@
                         o.quarter = getQuarter(o.month);
                     });
 
+                    // 1. Calculate Gross Sales Revenue (Post Status Filter - All Time)
+                    let grossSalesRevenue = 0;
+                    const totalSalesOrders = sales.length;
+                    sales.forEach(function(o) {
+                        grossSalesRevenue += o.total;
+                    });
+                    
+                    // 2. Calculate Sales Revenue after Capping/Admission Fee but before Eligibility Filters (All Time)
+                    let salesCappedRevenue = 0;
+                    const preEligibilityOrders = []; // 🆕 NEW ARRAY: Orders for the selected quarter, Pre-Eligibility
+                    
+                    const subIds = {}; // Used to identify the first payment of a subscription
+                    sales.forEach(function(o) {
+                        if (o.subId && !subIds[o.subId]) {
+                            subIds[o.subId] = o.timestamp.getTime();
+                        }
+                    });
+
+                    sales.forEach(function(order) {
+                        // Admission Fee / Capping Logic applied to ALL valid sales
+                        const isFirstMonth = order.subId && subIds[order.subId] === order.timestamp.getTime();
+                        
+                        const baseAmount = settings.revenueBase === 'total' ? order.total : order.subtotal;
+                        
+                        const listPrice = isFirstMonth ? 29.99 : 19.99;
+                        const discountPct = Math.max(0, (1 - (order.total / listPrice)) * 100);
+                        
+                        const includeAdmission = isFirstMonth && discountPct > settings.discountThreshold;
+                        const admissionComponent = includeAdmission ? settings.admissionFee : 0;
+                        
+                        let originalEligibleAmount = baseAmount + admissionComponent;
+                        
+                        const cappedAmount = Math.min(originalEligibleAmount, settings.maxEligibleAmount); 
+                        
+                        salesCappedRevenue += cappedAmount; // All-time Capped Revenue
+                        
+                        // 🆕 Store Capped/Admission data into the order object
+                        order.originalEligibleAmount = originalEligibleAmount;
+                        order.eligibleAmount = cappedAmount;
+                        order.isFirstMonth = isFirstMonth;
+                        order.includeAdmission = includeAdmission;
+
+                        // 🆕 Check for Quarter/Year match to store the data that *can* be exported
+                        if (order.quarter === settings.quarter && order.year === settings.year) {
+                            preEligibilityOrders.push(order);
+                        }
+                    });
+
+
                     updateProgress(50, '🔄 Processing enrollments...');
                     
                     const enrollments = appState.enrollmentsData.map(function(e) {
@@ -576,6 +634,8 @@
                             enrollmentDate: parseDate(e['Enrollment Date'] || e.enrollment_date)
                         };
                     });
+                    
+                    // ... (Course Mapping and Progress Thresholds logic remains the same)
 
                     const courseMap = {};
                     if (appState.coursesData) {
@@ -589,7 +649,6 @@
                         });
                     }
 
-                    // MERGE PROGRESS THRESHOLDS
                     const progressThresholds = {};
                     if (appState.progressThresholdsData) {
                         appState.progressThresholdsData.forEach(function(t) {
@@ -600,7 +659,6 @@
                             }
                         });
                     }
-                    // END MERGE PROGRESS THRESHOLDS
 
                     enrollments.forEach(function(e) {
                         if (!courseMap[e.course]) {
@@ -611,11 +669,11 @@
                                 totalClasses: 50
                             };
                         }
-                        // ADD PROGRESS THRESHOLD TO COURSEMAP
                         courseMap[e.course].minProgress = progressThresholds[e.course] !== undefined 
                             ? progressThresholds[e.course]
                             : settings.minProgressDefault;
                     });
+
 
                     updateProgress(70, '🔄 Calculating eligibility...');
                     
@@ -626,7 +684,6 @@
                         const totalClasses = courseInfo.totalClasses || 50;
                         const classesWatched = Math.round((enroll.progress / 100) * totalClasses);
                         
-                        // USE COURSE-SPECIFIC OR DEFAULT MIN PROGRESS
                         const minProgressForCourse = courseInfo.minProgress !== undefined 
                             ? courseInfo.minProgress
                             : settings.minProgressDefault; 
@@ -635,6 +692,7 @@
                         const meetsClasses = classesWatched >= settings.minClasses;
                         const isEligible = meetsProgress && meetsClasses;
                         
+                        // **This is the filter that removes most orders based on student consumption**
                         if (!isEligible) return;
                         
                         const studentOrders = sales.filter(function(o) {
@@ -645,29 +703,16 @@
                         
                         if (studentOrders.length === 0) return;
                         
-                        const subIds = {};
-                        studentOrders.forEach(function(o) {
-                            if (o.subId && !subIds[o.subId]) {
-                                subIds[o.subId] = o.timestamp.getTime();
-                            }
-                        });
                         
                         let eligibleCount = 0;
                         
                         studentOrders.forEach(function(order) {
-                            if (eligibleCount >= 3) return;
+                            if (eligibleCount >= 3) return; // **3-order cap per student per course**
                             
-                            const isFirstMonth = order.subId && subIds[order.subId] === order.timestamp.getTime();
-                            
-                            const baseAmount = settings.revenueBase === 'total' ? order.total : order.subtotal;
-                            
-                            const listPrice = isFirstMonth ? 29.99 : 19.99;
-                            const discountPct = Math.max(0, (1 - (order.total / listPrice)) * 100);
-                            
-                            const includeAdmission = isFirstMonth && discountPct > settings.discountThreshold;
-                            const admissionComponent = includeAdmission ? settings.admissionFee : 0;
-                            const eligibleAmount = baseAmount + admissionComponent;
-                            
+                            // Use the pre-calculated eligible amounts stored in the order object
+                            const originalEligibleAmount = order.originalEligibleAmount; 
+                            const eligibleAmount = order.eligibleAmount; 
+
                             eligibility.push({
                                 email: enroll.email,
                                 course: enroll.course,
@@ -677,10 +722,11 @@
                                 month: order.month,
                                 year: order.year,
                                 quarter: order.quarter,
-                                isFirstMonth: isFirstMonth,
-                                discountPct: discountPct,
-                                includeAdmission: includeAdmission,
-                                eligibleAmount: eligibleAmount
+                                isFirstMonth: order.isFirstMonth,
+                                discountPct: Math.max(0, (1 - (order.total / (order.isFirstMonth ? 29.99 : 19.99))) * 100),
+                                includeAdmission: order.includeAdmission,
+                                originalEligibleAmount: originalEligibleAmount, 
+                                eligibleAmount: eligibleAmount 
                             });
                             
                             eligibleCount++;
@@ -693,12 +739,16 @@
                         return e.quarter === settings.quarter && e.year === settings.year;
                     });
                     
-                    let quarterRevenue = 0;
+                    let quarterRevenueCapped = 0; 
+                    let quarterRevenueOriginal = 0; 
+                    let totalOrdersInQuarter = quarterEligible.length;
+
                     quarterEligible.forEach(function(e) {
-                        quarterRevenue += e.eligibleAmount;
+                        quarterRevenueCapped += e.eligibleAmount;
+                        quarterRevenueOriginal += e.originalEligibleAmount;
                     });
                     
-                    const teacherPool = quarterRevenue * settings.poolPercent;
+                    const teacherPool = quarterRevenueCapped * settings.poolPercent;
                     
                     const teacherGroups = _.groupBy(quarterEligible, 'teacherId');
                     const teacherPayouts = [];
@@ -706,8 +756,8 @@
                     for (const teacherId in teacherGroups) {
                         const orders = teacherGroups[teacherId];
                         const orderCount = orders.length;
-                        const shareRatio = orderCount / quarterEligible.length;
-                        const payout = teacherPool * shareRatio;
+                        const shareRatio = orderCount / totalOrdersInQuarter;
+                        const payout = teacherPool * shareRatio; 
                         
                         teacherPayouts.push({
                             teacherId: teacherId,
@@ -724,9 +774,14 @@
                     
                     appState.results = {
                         settings: settings,
-                        quarterRevenue: quarterRevenue,
+                        grossSalesRevenue: grossSalesRevenue, 
+                        totalSalesOrders: totalSalesOrders,   
+                        salesCappedRevenue: salesCappedRevenue,
+                        preEligibilityOrders: preEligibilityOrders, // 🆕 NEW FIELD
+                        originalQuarterRevenue: quarterRevenueOriginal, 
+                        quarterRevenue: quarterRevenueCapped, 
                         teacherPool: teacherPool,
-                        totalOrders: quarterEligible.length,
+                        totalOrders: totalOrdersInQuarter,
                         teacherPayouts: teacherPayouts,
                         eligibility: quarterEligible,
                         allEligibility: eligibility
@@ -752,9 +807,27 @@
             
             let summaryHTML = '';
             summaryHTML += '<div class="card"><h3>Quarter</h3><div class="value">Q' + r.settings.quarter + ' ' + r.settings.year + '</div></div>';
-            summaryHTML += '<div class="card"><h3>Total Revenue</h3><div class="value">$' + r.quarterRevenue.toFixed(2) + '</div></div>';
-            summaryHTML += '<div class="card"><h3>Teacher Pool</h3><div class="value">$' + r.teacherPool.toFixed(2) + '</div></div>';
-            summaryHTML += '<div class="card"><h3>Total Orders</h3><div class="value">' + r.totalOrders + '</div></div>';
+            
+            // 1. Total Sales (Post Status Filter - Gross Revenue)
+            summaryHTML += '<div class="card highlight"><h3>Total Sales (Post Status)</h3><div class="value">$' + r.grossSalesRevenue.toFixed(2) + '</div></div>'; 
+            
+            // 2. Total Sales (Post Status & Capped - The user\'s requested comparison metric, Now uses highlight)
+            summaryHTML += '<div class="card highlight"><h3>Total Sales (Capped, Pre-Eligibility)</h3><div class="value">$' + r.salesCappedRevenue.toFixed(2) + '</div></div>'; 
+            
+            // 3. Total Eligible Revenue (Original)
+            summaryHTML += '<div class="card"><h3>Total Eligible Revenue (Original)</h3><div class="value">$' + r.originalQuarterRevenue.toFixed(2) + '</div></div>'; 
+            
+            // 4. Total Eligible Revenue (Capped - The distribution base)
+            summaryHTML += '<div class="card"><h3>Total Eligible Revenue (Capped)</h3><div class="value">$' + r.quarterRevenue.toFixed(2) + '</div></div>'; 
+            
+            // 5. Teacher Pool (The final amount for distribution)
+            summaryHTML += '<div class="card"><h3>Teacher Pool (' + (r.settings.poolPercent * 100).toFixed(0) + '% Capped)</h3><div class="value">$' + r.teacherPool.toFixed(2) + '</div></div>'; 
+            
+            // Order Counts
+            summaryHTML += '<div class="card highlight"><h3>Total Sales Orders (Post Status)</h3><div class="value">' + r.totalSalesOrders + '</div></div>';
+
+            summaryHTML += '<div class="card"><h3>Total Eligible Orders</h3><div class="value">' + r.totalOrders + '</div></div>';
+            
             summaryHTML += '<div class="card"><h3>Teachers</h3><div class="value">' + r.teacherPayouts.length + '</div></div>';
             
             document.getElementById('summaryCards').innerHTML = summaryHTML;
@@ -795,8 +868,8 @@
             tableHTML += '<th>Teacher</th>';
             tableHTML += '<th>Course</th>';
             tableHTML += '<th>Orders</th>';
-            tableHTML += '<th>Course Revenue</th>';
-            tableHTML += '<th>Teacher Payout</th>';
+            tableHTML += '<th>Course Revenue (Capped)</th>';
+            tableHTML += '<th>Teacher Payout (' + (r.settings.poolPercent * 100).toFixed(0) + '% Capped)</th>';
             tableHTML += '</tr></thead><tbody>';
             
             for (let i = 0; i < courseData.length; i++) {
@@ -843,10 +916,12 @@
                 
                 for (const key in grouped) {
                     const group = grouped[key];
-                    let revenue = 0;
+                    let revenueCapped = 0;
+                    let revenueOriginal = 0;
                     let admCount = 0;
                     group.forEach(function(o) {
-                        revenue += o.eligibleAmount;
+                        revenueCapped += o.eligibleAmount;
+                        revenueOriginal += o.originalEligibleAmount;
                         if (o.includeAdmission) admCount++;
                     });
                     
@@ -857,12 +932,13 @@
                         month: group[0].month,
                         year: group[0].year,
                         eligible_orders: group.length,
-                        eligible_amount: revenue.toFixed(2),
+                        eligible_amount_original: revenueOriginal.toFixed(2), 
+                        eligible_amount_capped: revenueCapped.toFixed(2), 
                         admission_included: admCount
                     });
                 }
                 filename = 'course_detail_Q' + r.settings.quarter + '_' + r.settings.year + '.csv';
-            } else {
+            } else if (type === 'audit') {
                 const grouped = _.groupBy(r.allEligibility, function(e) {
                     return e.email + '_' + e.course;
                 });
@@ -892,6 +968,22 @@
                     });
                 }
                 filename = 'student_audit_Q' + r.settings.quarter + '_' + r.settings.year + '.csv';
+            } else if (type === 'pre-eligibility') { // 🆕 NEW EXPORT TYPE
+                r.preEligibilityOrders.forEach(function(o) {
+                    data.push({
+                        order_id: o.id,
+                        user_email: o.email,
+                        timestamp: o.timestamp.toISOString(),
+                        original_total: o.total.toFixed(2),
+                        is_first_month: o.isFirstMonth ? 'Yes' : 'No',
+                        admission_included: o.includeAdmission ? 'Yes' : 'No',
+                        eligible_amount_original: o.originalEligibleAmount.toFixed(2),
+                        eligible_amount_capped: o.eligibleAmount.toFixed(2),
+                        quarter: o.quarter,
+                        year: o.year
+                    });
+                });
+                filename = 'pre_eligibility_orders_Q' + r.settings.quarter + '_' + r.settings.year + '.csv';
             }
             
             const csv = Papa.unparse(data);
@@ -926,10 +1018,12 @@
             const courseData = [];
             for (const key in courseGrouped) {
                 const group = courseGrouped[key];
-                let revenue = 0;
+                let revenueCapped = 0;
+                let revenueOriginal = 0;
                 let admCount = 0;
                 group.forEach(function(o) {
-                    revenue += o.eligibleAmount;
+                    revenueCapped += o.eligibleAmount;
+                    revenueOriginal += o.originalEligibleAmount;
                     if (o.includeAdmission) admCount++;
                 });
                 
@@ -940,7 +1034,8 @@
                     'Month': group[0].month,
                     'Year': group[0].year,
                     'Eligible Orders': group.length,
-                    'Eligible Amount': revenue.toFixed(2),
+                    'Eligible Amount (Original)': revenueOriginal.toFixed(2), 
+                    'Eligible Amount (Capped)': revenueCapped.toFixed(2), 
                     'Admission Included': admCount
                 });
             }
@@ -975,12 +1070,35 @@
                 });
             }
             
+            // 🆕 NEW DATA FOR PRE-ELIGIBILITY SHEET
+            const preEligibilityData = [];
+            r.preEligibilityOrders.forEach(function(o) {
+                preEligibilityData.push({
+                    'Order ID': o.id,
+                    'User Email': o.email,
+                    'Timestamp': o.timestamp.toISOString(),
+                    'Original Total': o.total.toFixed(2),
+                    'Is First Month': o.isFirstMonth ? 'Yes' : 'No',
+                    'Admission Included': o.includeAdmission ? 'Yes' : 'No',
+                    'Eligible Amount (Original)': o.originalEligibleAmount.toFixed(2),
+                    'Eligible Amount (Capped)': o.eligibleAmount.toFixed(2),
+                    'Quarter': o.quarter,
+                    'Year': o.year
+                });
+            });
+            
             const summaryData = [
                 { 'Metric': 'Quarter', 'Value': 'Q' + r.settings.quarter },
                 { 'Metric': 'Year', 'Value': r.settings.year },
-                { 'Metric': 'Total Eligible Revenue', 'Value': `$${r.quarterRevenue.toFixed(2)}` },
-                { 'Metric': 'Teacher Pool', 'Value': `$${r.teacherPool.toFixed(2)}` },
-                { 'Metric': 'Total Orders', 'Value': r.totalOrders },
+                // Q-INDEPENDENT METRICS
+                { 'Metric': 'Total Sales Revenue (Post Status Filter)', 'Value': `$${r.grossSalesRevenue.toFixed(2)}` },
+                { 'Metric': 'Total Sales Revenue (Capped, Pre-Eligibility - All Time)', 'Value': `$${r.salesCappedRevenue.toFixed(2)}` },
+                { 'Metric': 'Total Sales Orders (Post Status Filter)', 'Value': r.totalSalesOrders },
+                // Q-DEPENDENT METRICS
+                { 'Metric': 'Total Eligible Revenue (Original)', 'Value': `$${r.originalQuarterRevenue.toFixed(2)}` },
+                { 'Metric': 'Total Eligible Revenue (Capped)', 'Value': `$${r.quarterRevenue.toFixed(2)}` },
+                { 'Metric': 'Teacher Pool (' + (r.settings.poolPercent * 100).toFixed(0) + '% Capped)', 'Value': `$${r.teacherPool.toFixed(2)}` },
+                { 'Metric': 'Total Eligible Orders (Q' + r.settings.quarter + ')', 'Value': r.totalOrders },
                 { 'Metric': 'Teachers', 'Value': r.teacherPayouts.length },
                 { 'Metric': 'Generated', 'Value': new Date().toLocaleString() }
             ];
@@ -999,6 +1117,9 @@
             const ws4 = XLSX.utils.json_to_sheet(studentData);
             XLSX.utils.book_append_sheet(wb, ws4, 'Student Audit');
             
+            const ws5 = XLSX.utils.json_to_sheet(preEligibilityData); // 🆕 NEW SHEET
+            XLSX.utils.book_append_sheet(wb, ws5, 'Pre-Eligibility Orders');
+
             XLSX.writeFile(wb, 'exports_Q' + r.settings.quarter + '_' + r.settings.year + '.xlsx');
         }
     </script>
